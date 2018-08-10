@@ -128,13 +128,19 @@ VERSION="${VERSION#go}"
 GO_MOD="false"
 
 case "${VERSION}" in
+1.11beta2)
+	GO_MOD="true"
+	GO_MOD_TIDY="-sync"
+;;
 1.11|1.11.*|1.11[a-z]*)
 	GO_MOD="true"
+	GO_MOD_TIDY="tidy"
 ;;
 esac
 
 TESTPKG_PREFIX="./"
 [[ "$GO_MOD" == "true" ]] && TESTPKG_PREFIX=""
+[[ "$GO_MOD" == "true" && -r "go.mod" ]] && MOD_BASE="$(awk '/^module/{print $2}' < go.mod)/"
 
 [[ "$VERBOSE" == "true" ]] && printf "listing files…\n"
 
@@ -165,12 +171,12 @@ while read dir; do
 done < <( find . -type d -not -name ".*" | grep -v -e "/vendor/" -e "/\." )
 
 if [[ "$GO_MOD" == "true" ]]; then
-	[[ "$VERBOSE" == "true" ]] && printf "go mod -sync…\n"
+	[[ "$VERBOSE" == "true" ]] && printf "go mod ${GO_MOD_TIDY}…\n"
 	
 	while read line; do
 		line="$( echo "$line" | sed "s|^go: ||" )"
-		[[ "$SHORT" != "true" ]] && printf "go mod -sync: ${HIDE}%s${NORMAL}\n" "$line"
-	done < <( "${GO}" mod -sync 2>&1 )
+		[[ "$SHORT" != "true" ]] && printf "go mod ${GO_MOD_TIDY}: ${HIDE}%s${NORMAL}\n" "$line"
+	done < <( "${GO}" mod ${GO_MOD_TIDY} 2>&1 )
 fi
 
 [[ "$VERBOSE" == "true" ]] && printf "listing packages…\n"
@@ -227,6 +233,8 @@ fi
 # We want to highlight any package that has golint errors, so we do each package separately.
 for pkg in "${GOPKGS[@]}"; do
 	FLAG="false"
+
+	pkg="${pkg#$MOD_BASE}"
 
 	while read line; do
 		if [[ "$FLAG" != "true" ]]; then
