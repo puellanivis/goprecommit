@@ -1,0 +1,305 @@
+#!/bin/bash
+
+# We use $NOTICE, $WARNING, $ERROR and $NORMAL here to color things.
+HIDE="\e[0;30;1m" # BOLD blue on black
+GOOD="\e[0;92;1m" # BOLD green on black
+INFO="\e[0;94;1m" # BOLD blue on black
+NOTICE="\e[0;96;1m" # BOLD cyan on black
+WARNING="\e[0;93;1m" # BOLD yellow on black
+ERROR="\e[0;91;1m" # BOLD red on black
+NORMAL="\e[m" # reset NORMAL colors
+CLEAR="\e[J" # CLEAR TO END-OF-LINE
+STARTCLEAR="\r$CLEAR"
+
+[[ -z "$GO" ]] && GO="go"
+
+if [[ "${GO#/}" == "$GO" ]]; then
+	GOBIN="$( which ${GO} 2> /dev/null )"
+
+	ret=$?
+	if [[ $ret -gt 0 ]]; then
+		echo "goprecommit: could not find '$GO' in path." 2>&1
+		exit 1
+	fi
+
+	GO="$GOBIN"
+fi
+
+if ! [[ -f "$GO" && -x "$GO" ]]; then
+	echo "goprecommit: ${GO} is not an executable file." 2>&1
+	exit 1
+fi
+
+# Check for preqrequisites.
+for prereq in "git"; do
+	if ! which "${prereq}" > /dev/null 2>&1; then
+		echo "goprecommit: ${prereq} must be installed and in the path." 2>&1
+		exit 1
+	fi
+done
+
+inrepo="$( git rev-parse --is-inside-work-tree 2>&1 )"
+case "$inrepo" in
+fatal*|false)
+	echo "goprecommit: must be run from within a git repo."
+	exit 1
+;;
+esac
+
+# Ensure $GOPATH/bin is in $PATH
+GOPATH_IN_PATH="false"
+i=0
+while read path; do
+	if [[ "$path" == "${GOPATH}/bin" ]]; then
+		GOPATH_IN_PATH="true"
+		break
+	fi
+done < <( echo $PATH | tr ':' '\n' )
+
+# If $GOPATH/bin is not in $PATH put it at the end.
+[[ "$GOPATH_IN_PATH" == "true" ]] || PATH="${PATH}:${GOPATH}/bin"
+
+if ! which golint > /dev/null 2>&1; then
+	echo "getting golint…"
+
+	"${GO}" get -u golang.org/x/lint/golint
+
+	if !which golint > /dev/null 2>&1; then
+		echo "goprecommit: could not locate golint even after go get" 2>&1
+		exit 1
+	fi
+fi
+
+if ! which goimports > /dev/null 2>&1; then
+	echo "getting goimports…"
+
+	"${GO}" get -u golang.org/x/tools/cmd/goimports
+
+	if !which goimports> /dev/null 2>&1; then
+		echo "goprecommit: could not locate goimports even after go get" 2>&1
+		exit 1
+	fi
+fi
+
+VERBOSE="false"
+SHORT="false"
+QUIET="false"
+
+while [[ $# -gt 0 ]]; do
+	key="$1"
+	val="${key#*=}"
+
+	case $key in
+	--nocache)
+		NOCACHE="-count=1"
+	;;
+	--verbose)
+		VERBOSE="true"
+		SHORT="false"
+		QUIET="false"
+	;;
+	--short)
+		SHORT="true"
+	;;
+	--quiet)
+		SHORT="true"
+		QUIET="true"
+	;;
+	--)
+		shift
+		break
+	;;
+	--*)
+		echo "unknown flag $1" >&2
+		exit 1
+	;;
+	*)
+		break
+	;;
+	esac
+	shift
+done
+
+VERSION="$( "${GO}" version | awk '//{ print $3 }' )"
+VERSION="${VERSION#go}"
+
+[[ "$VERBOSE" == "true" ]] && printf "found %s\n" "${VERSION}"
+
+GO_MOD="false"
+
+case "${VERSION}" in
+1.11|1.11.*|1.11[a-z]*)
+	GO_MOD="true"
+;;
+esac
+
+TESTPKG_PREFIX="./"
+[[ "$GO_MOD" == "true" ]] && TESTPKG_PREFIX=""
+
+[[ "$VERBOSE" == "true" ]] && printf "listing files…\n"
+
+i=0
+while read file; do
+	if ! [[ -s "$file" ]]; then
+		continue
+	fi
+
+	GOFILES[ $i ]="$file"
+	(( i++ ))
+done < <( git ls-files | grep "\.go$" | grep -v "^vendor/" )
+
+MOD_PATH="${PWD#$GOPATH/src/}/"
+
+[[ "$VERBOSE" == "true" ]] && printf "looking for subrepos…\n"
+
+i=0
+while read dir; do
+	dir="${dir#./}"
+
+	if [[ -d "${dir}/.git" ]]; then
+		[[ "$VERBOSE" == "true" ]] && printf "found subrepo: $dir\n"
+		SUBREPO[ $i ]="$dir"
+		(( i++ ))
+	fi
+
+done < <( find . -type d -not -name ".*" | grep -v -e "/vendor/" -e "/\." )
+
+if [[ "$GO_MOD" == "true" ]]; then
+	[[ "$VERBOSE" == "true" ]] && printf "go mod -sync…\n"
+	
+	while read line; do
+		line="$( echo "$line" | sed "s|^go: ||" )"
+		[[ "$SHORT" != "true" ]] && printf "go mod -sync: ${HIDE}%s${NORMAL}\n" "$line"
+	done < <( "${GO}" mod -sync 2>&1 )
+fi
+
+[[ "$VERBOSE" == "true" ]] && printf "listing packages…\n"
+
+i=0
+while read pkg; do
+	pkg="$( echo "$pkg" | sed "s|\b_$PWD/||" | sed "s|\b_$PWD|.|" )"
+	pkg="${pkg#$MOD_PATH}"
+
+	if git check-ignore -q "${pkg}"; then
+		# If the project would be ignored in git, then we want to process it.
+		[[ "$VERBOSE" == "true" ]] && printf "package is ignored in git: %s\n" "${pkg}"
+		continue
+	fi
+
+	IN_SUBREPO="false"
+
+	for subrepo in "${SUBREPO[@]}"; do
+		if [[ "${pkg#$subrepo}" != "${pkg}" ]]; then
+			[[ "$VERBOSE" == "true" ]] && printf "package is in a subrepo: %s\n" "${pkg}"
+			IN_SUBREPO="true"
+			break
+		fi
+	done
+
+	if [[ "$IN_SUBREPO" == "false" ]]; then
+		GOPKGS[ $i ]="$pkg"
+		TESTPKGS[ $i ]="${TESTPKG_PREFIX}$pkg"
+		(( i++ ))
+	fi
+done < <( "${GO}" list ./... | grep -v "/vendor/" )
+
+EXIT="false"
+
+if [[ ${#GOFILES[@]} -gt 0 ]]; then
+	[[ "$VERBOSE" == "true" ]] && printf "gofmt on files…\n"
+
+	while read line; do
+		[[ "$QUIET" != "true" ]] && printf "gofmt: ${ERROR}%s${NORMAL}\n" "$line"
+		EXIT="true"
+	done < <(gofmt -l "${GOFILES[@]}")
+
+	[[ "$VERBOSE" == "true" ]] && printf "goimports on files…\n"
+
+	while read line; do
+		[[ "$QUIET" != "true" ]] && printf "goimports: ${ERROR}%s${NORMAL}\n" "$line"
+		EXIT="true"
+	done < <( goimports -l "${GOFILES[@]}" 2>&1 )
+fi
+
+[[ "$VERBOSE" == "true" ]] && printf "golint on packages…\n"
+
+# golint complains if we reference all of the files together, so we need to do a per-package check.
+# We want to highlight any package that has golint errors, so we do each package separately.
+for pkg in "${GOPKGS[@]}"; do
+	FLAG="false"
+
+	while read line; do
+		if [[ "$FLAG" != "true" ]]; then
+			[[ "$QUIET" != "true" ]] && printf "golint: ${ERROR}%s${NORMAL}\n" "$pkg"
+
+			FLAG="true"
+			EXIT="true"
+		fi
+
+		line=${line#${PWD}/}
+		[[ "$SHORT" != "true" ]] && printf "golint: ${WARNING}%s${NORMAL}\n" "$line"
+	done < <( golint "$pkg" 2>&1 )
+done
+
+[[ "$VERBOSE" == "true" ]] && printf "go test on packages…\n"
+
+while read line; do
+	line="$( echo "$line" | sed "s|\b_$PWD/||" | sed "s|\b_$PWD|.|" | sed "s|\b$MOD_PATH||" )"
+
+	case "$line" in
+	"go: "*)
+		# go messages should be shadowed.
+		[[ "$SHORT" != "true" ]] && printf "go test: ${HIDE}%s${NORMAL}\n" "$line"
+	;;
+	ok*\(cached\))
+		# Cached test results should be low-lighted.
+		[[ "$SHORT" != "true" ]] && printf "go test: ${INFO}%s${NORMAL}\n" "$line"
+	;;
+	ok*)
+		[[ "$QUIET" != "true" ]] && printf "go test: ${GOOD}%s${NORMAL}\n" "$line"
+	;;
+	FAIL) ;;
+	---\ FAIL*)
+		# Failures should be highlighted as errors.
+		[[ "$SHORT" != "true" ]] && printf "go test: ${ERROR}%s${NORMAL}\n" "$line"
+		EXIT="true"
+	;;
+	FAIL*)
+		# Failures should be highlighted as errors.
+		[[ "$QUIET" != "true" ]] && printf "go test: ${ERROR}%s${NORMAL}\n" "$line"
+		EXIT="true"
+	;;
+	*cannot\ find\ package*)
+		# Failures should be highlighted as errors.
+		[[ "$QUIET" != "true" ]] && printf "go test: ${ERROR}%s${NORMAL}\n" "$line"
+		EXIT="true"
+	;;
+	\?*\[no\ test\ files\])
+		pkg="$( echo $line | awk '//{ print $2 }' )"
+
+		# If pkg has a leading underscore, then replace "_${PWD}/" with "./".
+		if [[ "${pkg#_}" != "${pkg}" ]]; then
+			pkg=".${pkg#_${PWD}}"
+		fi
+
+		pkgname="$( "${GO}" list -f "{{.Name}}" $pkg 2>&1 )"
+		case $pkgname in
+		main)
+			# If a main package does not have tests, then it should be shadowed.
+			[[ "$SHORT" != "true" ]] && printf "go test: ${HIDE}%s${NORMAL}\n" "$line"
+		;;
+		*)
+			# Non-main packages with no test-files should be lightly highlighted.
+			[[ "$SHORT" != "true" ]] && printf "go test: ${NOTICE}%s${NORMAL}\n" "$line"
+		;;
+		esac
+	;;
+	*)
+		# Lines that we cannot recognize as anything else should be highlighted as warnings.
+		[[ "$SHORT" != "true" ]] && printf "go test: ${WARNING}%s${NORMAL}\n" "$line"
+	;;
+	esac
+done < <( "${GO}" test $NOCACHE "${TESTPKGS[@]}" 2>&1 )
+
+[[ "$EXIT" == "true" ]] && exit 1
+exit 0
