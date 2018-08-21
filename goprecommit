@@ -310,7 +310,8 @@ while read line; do
 	;;
 	*)
 		# Lines that we cannot recognize as anything else should be highlighted as warnings.
-		[[ "$SHORT" != "true" ]] && printf "go test: ${WARNING}%s${NORMAL}\n" "$line"
+		[[ "$QUIET" != "true" ]] && printf "go test: ${WARNING}%s${NORMAL}\n" "$line"
+		EXIT="true" # should additionally break commit attempt.
 	;;
 	esac
 done < <( "${GO}" test $NOCACHE "${TESTPKGS[@]}" 2>&1 )
