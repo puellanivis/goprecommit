@@ -140,8 +140,9 @@ esac
 
 TESTPKG_PREFIX="./"
 [[ "$GO_MOD" == "true" ]] && TESTPKG_PREFIX=""
-[[ "$GO_MOD" == "true" && -r "go.mod" ]] && MOD_BASE="$(awk '/^module/{print $2}' < go.mod)/"
+[[ "$GO_MOD" == "true" && -r "go.mod" ]] && MOD_BASE="$(awk '/^module/{print $2}' < go.mod)"
 
+[[ "$VERBOSE" == "true" ]] && printf "found MOD_BASE=$MOD_BASE\n"
 [[ "$VERBOSE" == "true" ]] && printf "listing files…\n"
 
 i=0
@@ -235,6 +236,11 @@ for pkg in "${GOPKGS[@]}"; do
 	FLAG="false"
 
 	pkg="${pkg#$MOD_BASE}"
+
+	[[ "$pkg" == "/" ]] && pkg="."
+	pkg="${pkg#/}"
+
+	[[ "$VERBOSE" == "true" ]] && printf "$ golint $pkg\n"
 
 	while read line; do
 		if [[ "$FLAG" != "true" ]]; then
