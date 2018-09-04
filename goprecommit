@@ -85,14 +85,53 @@ VERBOSE="false"
 SHORT="false"
 QUIET="false"
 
+LINT="true"
+[[ -n $GOPRECOMMIT_NOLINT ]] && LINT="false"
+
 while [[ $# -gt 0 ]]; do
 	key="$1"
 	val="${key#*=}"
 
 	case $key in
+	--cache)
+		NOCACHE=""
+	;;
 	--nocache)
 		NOCACHE="-count=1"
 	;;
+	--cache=*)
+		case $val in
+		true)
+			NOCACHE=""
+		;;
+		false)
+			NOCACHE="-count=1"
+		;;
+		*)
+			echo "unknown value for $key: $val" >&2
+			exit 1
+		;;
+		esac
+	;;
+
+	--lint)
+		LINT="true"
+	;;
+	--nolint)
+		LINT="false"
+	;;
+	--lint=*)
+		case $val in
+		true|false)
+			LINT="$val"
+		;;
+		*)
+			echo "unknown value for $key: $val" >&2
+			exit 1
+		;;
+		esac
+	;;
+
 	--verbose)
 		VERBOSE="true"
 		SHORT="false"
@@ -228,32 +267,34 @@ if [[ ${#GOFILES[@]} -gt 0 ]]; then
 	done < <( goimports -l "${GOFILES[@]}" 2>&1 )
 fi
 
-[[ "$VERBOSE" == "true" ]] && printf "golint on packages…\n"
+if [[ "$LINT" != "false" ]]; then
+	[[ "$VERBOSE" == "true" ]] && printf "golint on packages…\n"
 
-# golint complains if we reference all of the files together, so we need to do a per-package check.
-# We want to highlight any package that has golint errors, so we do each package separately.
-for pkg in "${GOPKGS[@]}"; do
-	FLAG="false"
+	# golint complains if we reference all of the files together, so we need to do a per-package check.
+	# We want to highlight any package that has golint errors, so we do each package separately.
+	for pkg in "${GOPKGS[@]}"; do
+		FLAG="false"
 
-	pkg="${pkg#$MOD_BASE}"
+		pkg="${pkg#$MOD_BASE}"
 
-	[[ "$pkg" == "/" ]] && pkg="."
-	pkg="${pkg#/}"
+		[[ "$pkg" == "/" ]] && pkg="."
+		pkg="${pkg#/}"
 
-	[[ "$VERBOSE" == "true" ]] && printf "$ golint $pkg\n"
+		[[ "$VERBOSE" == "true" ]] && printf "$ golint $pkg\n"
 
-	while read line; do
-		if [[ "$FLAG" != "true" ]]; then
-			[[ "$QUIET" != "true" ]] && printf "golint: ${ERROR}%s${NORMAL}\n" "$pkg"
+		while read line; do
+			if [[ "$FLAG" != "true" ]]; then
+				[[ "$QUIET" != "true" ]] && printf "golint: ${ERROR}%s${NORMAL}\n" "$pkg"
 
-			FLAG="true"
-			EXIT="true"
-		fi
+				FLAG="true"
+				EXIT="true"
+			fi
 
-		line=${line#${PWD}/}
-		[[ "$SHORT" != "true" ]] && printf "golint: ${WARNING}%s${NORMAL}\n" "$line"
-	done < <( golint "$pkg" 2>&1 )
-done
+			line=${line#${PWD}/}
+			[[ "$SHORT" != "true" ]] && printf "golint: ${WARNING}%s${NORMAL}\n" "$line"
+		done < <( golint "$pkg" 2>&1 )
+	done
+fi
 
 [[ "$VERBOSE" == "true" ]] && printf "go test on packages…\n"
 
