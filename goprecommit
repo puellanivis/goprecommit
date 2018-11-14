@@ -177,11 +177,23 @@ case "${VERSION}" in
 ;;
 esac
 
+MOD_PATH="${PWD#$GOPATH/src/}"
+[[ "$VERBOSE" == "true" ]] && printf "found MOD_PATH=%s\n" "$MOD_PATH"
+
+if [[ $MOD_PATH != $PWD || ! -r go.mod ]]; then
+	[[ "$VERBOSE" == "true" ]] && printf "ignoring go modules…\n"
+	unset GO_MOD
+	unset GO_MOD_TIDY
+fi
+
 TESTPKG_PREFIX="./"
 [[ "$GO_MOD" == "true" ]] && TESTPKG_PREFIX=""
-[[ "$GO_MOD" == "true" && -r "go.mod" ]] && MOD_BASE="$(awk '/^module/{print $2}' < go.mod)"
 
-[[ "$VERBOSE" == "true" ]] && printf "found MOD_BASE=$MOD_BASE\n"
+if [[ "$GO_MOD" == "true" && -r "go.mod" ]]; then
+	MOD_BASE="$(awk '/^module/{print $2}' < go.mod)"
+	[[ "$VERBOSE" == "true" ]] && printf "found MOD_BASE=%s\n" "$MOD_BASE"
+fi
+
 [[ "$VERBOSE" == "true" ]] && printf "listing files…\n"
 
 i=0
@@ -193,8 +205,6 @@ while read file; do
 	GOFILES[ $i ]="$file"
 	(( i++ ))
 done < <( git ls-files | grep "\.go$" | grep -v "^vendor/" )
-
-MOD_PATH="${PWD#$GOPATH/src/}/"
 
 [[ "$VERBOSE" == "true" ]] && printf "looking for subrepos…\n"
 
@@ -224,7 +234,9 @@ fi
 i=0
 while read pkg; do
 	pkg="$( echo "$pkg" | sed "s|\b_$PWD/||" | sed "s|\b_$PWD|.|" )"
-	pkg="${pkg#$MOD_PATH}"
+	pkg="${pkg#$MOD_PATH/}"
+
+	[[ "$pkg" == "$MOD_PATH" ]] && pkg="."
 
 	if git check-ignore -q "${pkg}"; then
 		# If the project would be ignored in git, then we want to process it.
@@ -298,8 +310,11 @@ fi
 
 [[ "$VERBOSE" == "true" ]] && printf "go test on packages…\n"
 
+# Exchange MOD_PATH for MOD_BASE if it is set.
+[[ -n "$MOD_BASE" ]] && MOD_PATH="$MOD_BASE"
+
 while read line; do
-	line="$( echo "$line" | sed "s|\b_$PWD/||" | sed "s|\b_$PWD|.|" | sed "s|\b$MOD_PATH||" )"
+	line="$( echo "$line" | sed "s|\b_$PWD/||" | sed "s|\b_$PWD|.|" | sed "s|\b$MOD_PATH/||" | sed "s|\b$MOD_PATH|.|")"
 
 	case "$line" in
 	"go: "*)
