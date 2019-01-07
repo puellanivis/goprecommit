@@ -372,5 +372,11 @@ while read line; do
 	esac
 done < <( "${GO}" test $NOCACHE "${TESTPKGS[@]}" 2>&1 )
 
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [[ $branch == "master" ]]; then
+	[[ "$QUIET" != "true" ]] && printf "branch name: ${ERROR}Do not commit to master${NORMAL}\n"
+	EXIT="true"
+fi
+
 [[ "$EXIT" == "true" ]] && exit 1
 exit 0
