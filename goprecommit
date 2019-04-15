@@ -175,6 +175,10 @@ case "${VERSION}" in
 	GO_MOD="true"
 	GO_MOD_TIDY="tidy"
 ;;
+1.12|1.12.*|1.12[a-z]*)
+	GO_MOD="true"
+	GO_MOD_TIDY="tidy"
+;;
 esac
 
 MOD_PATH="${PWD#$GOPATH/src/}"
