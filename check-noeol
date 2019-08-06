@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# We use $NOTICE, $WARNING, $ERROR and $NORMAL here to color things.
+HIDE="\e[0;30;1m" # BOLD blue on black
+GOOD="\e[0;92;1m" # BOLD green on black
+INFO="\e[0;94;1m" # BOLD blue on black
+NOTICE="\e[0;96;1m" # BOLD cyan on black
+WARNING="\e[0;93;1m" # BOLD yellow on black
+ERROR="\e[0;91;1m" # BOLD red on black
+NORMAL="\e[m" # reset NORMAL colors
+CLEAR="\e[J" # CLEAR TO END-OF-LINE
+STARTCLEAR="\r$CLEAR"
+
+VERBOSE="false"
+SHORT="false"
+QUIET="false"
+
+while [[ $# -gt 0 ]]; do
+		key="$1"
+	val="${key#*=}"
+
+	case $key in
+	--verbose)
+		VERBOSE="true"
+		SHORT="false"
+		QUIET="false"
+	;;
+	--short)
+		SHORT="true"
+	;;
+	--quiet)
+		SHORT="true"
+		QUIET="true"
+	;;
+	--)
+		shift
+		break
+	;;
+	--*)
+		echo "unknown flag $1" >&2
+		exit 1
+	;;
+	*)
+		break
+	;;
+	esac
+	shift
+done
+
+FORMAT="${ERROR}%s${NORMAL} does not end with eol"
+if [[ "$VERBOSE" == "true" ]]; then
+	FORMAT="${ERROR}%s${NORMAL} ends with 0x%s (%s) not with eol"
+elif [[ "$SHORT" == "true" ]]; then
+	FORMAT="%s"
+fi
+
+FAILED="false"
+while [[ $# -gt 0 ]]; do
+	filename="$1"
+
+	if ! [[ -s $filename ]]; then
+		shift
+		continue
+	fi
+
+	[[ "$VERBOSE" == "true" ]] && echo "checking $filename…"
+	lastChar="$(tail -c 1 "$filename" | xxd -p )"
+
+	if [[ "$lastChar" != "0a" ]]; then
+		if [[ "$VERBOSE" == "true" ]]; then
+			printable="$(echo "$lastChar" | xxd -r -p | cat -v -T )"
+			printf "${FORMAT}\n" "$filename" "$lastChar" "$printable"
+		else
+			printf "${FORMAT}\n" "$filename"
+		fi
+		FAILED="true"
+	fi
+
+	shift
+done
+
+if [[ $FAILED == "true" ]]; then 
+	[[ "$QUIET" != "true" ]] && printf "${WARNING}some files lack EOL${NORMAL}\n" >&2
+	exit 1
+fi
