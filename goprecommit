@@ -179,6 +179,10 @@ case "${VERSION}" in
 	GO_MOD="true"
 	GO_MOD_TIDY="tidy"
 ;;
+1.13|1.13.*|1.13[a-z]*)
+	GO_MOD="true"
+	GO_MOD_TIDY="tidy"
+;;
 esac
 
 MOD_PATH="${PWD#$GOPATH/src/}"
@@ -381,6 +385,8 @@ if [[ $branch == "master" ]]; then
 	[[ "$QUIET" != "true" ]] && printf "branch name: ${ERROR}Do not commit to master${NORMAL}\n"
 	EXIT="true"
 fi
+
+find * -type f -name "*.*" -exec check-noeol \{\} \+ || EXIT="true"
 
 [[ "$EXIT" == "true" ]] && exit 1
 exit 0
