@@ -1,14 +1,14 @@
-#!/bin/bash
+#!/bin/sh
 
-GOFILES="$( find . -name "*.go" | wc -l )"
+GOFILES="`git ls-files | grep -c '\.go$'`"
 
-if [[ $GOFILES -gt 0 ]]; then
+if [ "$GOFILES" -gt 0 ]; then
 	if ! which goprecommit > /dev/null 2>&1 ; then
 		echo "goprecommit not in your path" 1>&2
 		exit 1
 	fi
 
-	GOPRECOMMIT="$( which goprecommit 2> /dev/null )"
+	GOPRECOMMIT="`which goprecommit 2> /dev/null`"
 
-	${GOPRECOMMIT} --short
+	"${GOPRECOMMIT}" --short
 fi
