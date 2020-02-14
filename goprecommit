@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # We use $NOTICE, $WARNING, $ERROR and $NORMAL here to color things.
 HIDE="\e[0;30;1m" # BOLD blue on black
