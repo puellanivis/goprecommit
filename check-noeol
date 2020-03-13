@@ -63,6 +63,16 @@ while [[ $# -gt 0 ]]; do
 		continue
 	fi
 
+	if echo "$filename" | grep -qF "/.git/"; then
+		shift
+		continue
+	fi
+
+	if echo "$filename" | grep -q "\.exe$"; then
+		shift
+		continue
+	fi
+
 	[[ "$VERBOSE" == "true" ]] && echo "checking $filename…"
 	lastChar="$(tail -c 1 "$filename" | xxd -p )"
 
