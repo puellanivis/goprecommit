@@ -167,19 +167,15 @@ VERSION="${VERSION#go}"
 GO_MOD="false"
 
 case "${VERSION}" in
+1.[0123456789]|1.[0123456789].*|1.[0123456789][a-z]*)
+;;
+1.10|1.10.*|1.10[a-z]*)
+;;
 1.11beta2)
 	GO_MOD="true"
 	GO_MOD_TIDY="-sync"
 ;;
-1.11|1.11.*|1.11[a-z]*)
-	GO_MOD="true"
-	GO_MOD_TIDY="tidy"
-;;
-1.12|1.12.*|1.12[a-z]*)
-	GO_MOD="true"
-	GO_MOD_TIDY="tidy"
-;;
-1.13|1.13.*|1.13[a-z]*)
+*)
 	GO_MOD="true"
 	GO_MOD_TIDY="tidy"
 ;;
