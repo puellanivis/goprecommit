@@ -336,6 +336,9 @@ while read line; do
 	ok*)
 		[[ "$QUIET" != "true" ]] && printf "go test: ${GOOD}%s${NORMAL}\n" "$line"
 	;;
+	PASS*)
+		[[ "$QUIET" != "true" ]] && printf "go test: ${GOOD}%s${NORMAL}\n" "$line"
+	;;
 	FAIL) ;;
 	---\ FAIL*)
 		# Failures should be highlighted as errors.
