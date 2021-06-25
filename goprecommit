@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-[[ -z $GO ]] && GO="go"
+[[ -z "$GO" ]] && GO="go"
 
-if [[ ${GO##*/} == $GO ]]; then
+if [[ "${GO##*/}" == "$GO" ]]; then
 	GOBIN="$( type -p "$GO" 2> /dev/null )"
 
 	ret=$?
@@ -14,15 +14,15 @@ if [[ ${GO##*/} == $GO ]]; then
 	GO="$GOBIN"
 fi
 
-if ! [[ -x $GO ]]; then
+if ! [[ -x "$GO" ]]; then
 	echo "goprecommit: $GO is not an executable file." 2>&1
 	exit 1
 fi
 
 # Check for preqrequisites.
 for prereq in "git"; do
-	if ! type -p "${prereq}" > /dev/null 2>&1; then
-		echo "goprecommit: ${prereq} must be installed and in the path." 2>&1
+	if ! type -p "$prereq" > /dev/null 2>&1; then
+		echo "goprecommit: $prereq must be installed and in the path." 2>&1
 		exit 1
 	fi
 done
@@ -40,13 +40,13 @@ SHORT="false"
 QUIET="false"
 
 LINT="true"
-[[ $GOPRECOMMIT_NOLINT = "true" ]] && LINT="false"
+[[ "$GOPRECOMMIT_NOLINT" = "true" ]] && LINT="false"
 
 while [[ $# -gt 0 ]]; do
 	key="$1"
 	val="${key#*=}"
 
-	case $key in
+	case "$key" in
 	--cache)
 		NOCACHE=""
 	;;
@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
 		NOCACHE="-count=1"
 	;;
 	--cache=*)
-		case $val in
+		case "$val" in
 		true)
 			NOCACHE=""
 		;;
@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
 		LINT="false"
 	;;
 	--lint=*)
-		case $val in
+		case "$val" in
 		true|false)
 			LINT="$val"
 		;;
@@ -117,18 +117,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 function printf_verbose { true ; }
-if [[ $VERBOSE == "true" ]]; then
+if [[ "$VERBOSE" == "true" ]]; then
 	function printf_verbose { printf "$@" ; }
 fi
 
 function printf_not_short { printf "$@" ; }
-if [[ $SHORT == "true" ]]; then
+if [[ "$SHORT" == "true" ]]; then
 	function printf_not_short { true ; }
 fi
 
-
 function printf_not_quiet { printf "$@" ; }
-if [[ $QUIET == "true" ]]; then
+if [[ "$QUIET" == "true" ]]; then
 	function printf_not_quiet { true ; }
 fi
 
@@ -146,9 +145,8 @@ function gopath_bin_in_path {
 	while read -r path; do
 		if [[ "$path" == "${GOPATH}/bin" ]]; then
 			return 0
-			break
 		fi
-	done < <( echo $PATH | tr ':' '\n' )
+	done < <( echo "$PATH" | tr ':' '\n' )
 
 	return 1
 }
@@ -159,39 +157,39 @@ gopath_bin_in_path || PATH="${PATH}:${GOPATH}/bin"
 VERSION="$( "$GO" version | awk '//{ print $3 }' )"
 VERSION="${VERSION#go}"
 
-printf_verbose "found go version %s\n" "${VERSION}"
+printf_verbose "found go version %s\n" "$VERSION"
 
 function go_install {
 	local bin="$1"
 	local pkg="$2"
 
-	if type -p $bin > /dev/null 2>&1; then
+	if type -p "$bin" > /dev/null 2>&1; then
 		return 0
 	fi
 
-	case "${VERSION}" in
+	case "$VERSION" in
 	1.[0123456789]|1.[0123456789].*|1.[0123456789][a-z]*)
-		"$GO" get -u $pkg
+		"$GO" get -u "$pkg"
 	;;
 	1.1[012345]|1.1[012345].*|1.1[012345][a-z]*)
-		"$GO" get -u $pkg
+		"$GO" get -u "$pkg"
 	;;
 	*)
-		"$GO" install $pkg@latest
+		"$GO" install "${pkg}@latest"
 	;;
 	esac
 
-	if ! type -p $bin > /dev/null 2>&1; then
+	if ! type -p "$bin" > /dev/null 2>&1; then
 		echo "goprecommit: could not locate $bin even after installing $pkg" 2>&1
 		return 1
 	fi
 }
 
-go_install golint golang.org/x/lint/golint
-go_install goimports golang.org/x/tools/cmd/goimports
+go_install golint golang.org/x/lint/golint || exit 1
+go_install goimports golang.org/x/tools/cmd/goimports || exit 1
 
 readarray -t GOMODS < <( git ls-files | grep "\(^\|/\)go\.mod$" | grep -v "\(^\|/\)vendor/" )
-printf_verbose "found go.mods=%d\n" ${#GOMODS[@]}
+printf_verbose "found go.mods=%d\n" "${#GOMODS[@]}"
 
 if [[ ${#GOMODS[@]} -lt 1 ]]; then
 	log_warning "goprecommit" "Could not find any go.mod files."
@@ -200,13 +198,13 @@ fi
 
 function precommit_module {
 	local gomod="$1"
-	printf_verbose "using go.mod=%s\n" $gomod
+	printf_verbose "using go.mod=%s\n" "$gomod"
 
-	cd "$(dirname $gomod)"
+	cd "$(dirname "$gomod")" || return 1
 
 	local GO_MODULES="false"
 
-	case "${VERSION}" in
+	case "$VERSION" in
 	1.[0123456789]|1.[0123456789].*|1.[0123456789][a-z]*)
 	;;
 	1.10|1.10.*|1.10[a-z]*)
@@ -221,10 +219,10 @@ function precommit_module {
 	;;
 	esac
 
-	local MOD_PATH="${PWD#$GOPATH/src/}"
+	local MOD_PATH="${PWD#"$GOPATH"/src/}"
 	printf_verbose "found MOD_PATH=%s\n" "$MOD_PATH"
 
-	if [[ $MOD_PATH != $PWD || ! -r go.mod ]]; then
+	if [[ "$MOD_PATH" != "$PWD" || ! -r go.mod ]]; then
 		printf_verbose "ignoring go modules…\n"
 		unset GO_MODULES
 		unset GO_MOD_TIDY
@@ -261,19 +259,18 @@ function precommit_module {
 		dir="${dir#./}"
 
 		if [[ -d "${dir}/.git" ]]; then
-			printf_verbose "found subrepo: $dir\n"
+			printf_verbose "found subrepo: %s\n" "$dir"
 			SUBREPO["$dir"]="true"
 		fi
-
 	done < <( find . -type d -not \( -name ".?*" -prune -o -name "vendor" -prune \) )
 
 	if [[ "$GO_MODULES" == "true" ]]; then
 		printf_verbose "go mod ${GO_MOD_TIDY}…\n"
 		
 		while read -r line; do
-			line="$( echo "$line" | sed 's;^go: ;;' )"
+			line="${line#go: }"
 			log_hide "go mod ${GO_MOD_TIDY}" "$line"
-		done < <( "$GO" mod ${GO_MOD_TIDY} 2>&1 )
+		done < <( "$GO" mod "${GO_MOD_TIDY}" 2>&1 )
 	fi
 
 	printf_verbose "listing packages…\n"
@@ -305,7 +302,7 @@ function precommit_module {
 		while read -r line; do
 			log_error "gofmt" "$line"
 			((ISSUES++))
-		done < <(gofmt -l "${GOFILES[@]}")
+		done < <(gofmt -l "${GOFILES[@]}" 2>&1 )
 
 		printf_verbose "goimports on files…\n"
 
@@ -315,14 +312,12 @@ function precommit_module {
 		done < <( goimports -l "${GOFILES[@]}" 2>&1 )
 	fi
 
-	if [[ "$LINT" != "false" ]]; then
+	if [[ "$LINT" == "true" ]]; then
 		printf_verbose "golint on packages…\n"
 
 		# golint complains if we reference all of the files together, so we need to do a per-package check.
 		# We want to highlight any package that has golint errors, so we do each package separately.
 		for pkg in "${GOPKGS[@]}"; do
-			FLAG="false"
-
 			pkg="${pkg#$MOD_BASE}"
 
 			[[ "$pkg" == "/" ]] && pkg="."
@@ -330,6 +325,7 @@ function precommit_module {
 
 			printf_verbose "$ golint $pkg\n"
 
+			FLAG="false"
 			while read -r line; do
 				if [[ "$FLAG" != "true" ]]; then
 					log_error "golint" "$pkg"
@@ -338,7 +334,7 @@ function precommit_module {
 					((ISSUES++))
 				fi
 
-				line=${line#${PWD}/}
+				line="${line#${PWD}/}"
 				log_warning "golint" "$line"
 			done < <( golint "$pkg" 2>&1 )
 		done
@@ -353,7 +349,7 @@ function precommit_module {
 		line="$( echo "$line" | sed -e "s;\b\(_$PWD\|$MOD_PATH\)/;;g" -e "s;\b\(_$PWD\|$MOD_PATH\);.;g" )"
 
 		# Strip leading whitespace for easier matching.
-		case "$( echo "$line" | sed -e 's/^[ \t]*//g' )" in 
+		case "$( echo "$line" | sed -e 's/^[ \t]*//' )" in
 		"go: "*)
 			# go messages should be shadowed.
 			log_hide "go test" "$line"
@@ -368,23 +364,24 @@ function precommit_module {
 		PASS*)
 			log_ok "go test" "$line"
 		;;
-		FAIL) ;;
+		FAIL) ;; # Ignore lines that just say "FAIL".
 		---\ FAIL*)
 			# Failures should be highlighted as errors.
 			log_error "go test" "$line"
 			((ISSUES++))
 		;;
 		panic:*\[recovered\])
-			# recovered panics should be shadowed.
+			# recovered panics should be highlighted as warnings.
 			log_warning "go test" "$line"
+			((ISSUES++))
 		;;
 		FAIL*|panic:*)
-			# Failures should be highlighted as errors.
+			# Failures and panics should be highlighted as errors.
 			log_error "go test" "$line"
 			((ISSUES++))
 		;;
 		*cannot\ find\ package*)
-			# Failures should be highlighted as errors.
+			# Not being able to find a package should be highlighted as an error.
 			log_error "go test" "$line"
 			((ISSUES++))
 		;;
@@ -392,12 +389,13 @@ function precommit_module {
 			pkg="$( echo "$line" | awk '//{ print $2 }' )"
 
 			# If pkg has a leading underscore, then replace "_${PWD}/" with "./".
-			if [[ "${pkg#_}" != "${pkg}" ]]; then
+			if [[ "${pkg#_}" != "$pkg" ]]; then
 				pkg=".${pkg#_${PWD}}"
 			fi
 
-			pkgname="$( "$GO" list -f "{{.Name}}" $pkg 2>&1 )"
-			case $pkgname in
+			pkgname="$( "$GO" list -f "{{.Name}}" "$pkg" 2>&1 )"
+
+			case "$pkgname" in
 			main)
 				# If a main package does not have tests, then it should be shadowed.
 				log_hide "go test" "$line"
@@ -409,35 +407,38 @@ function precommit_module {
 			esac
 		;;
 		*)
-			line="$( echo "$line" | sed -e "s;${PWD};.;" )"
 			# Lines that we cannot recognize as anything else should be highlighted as warnings.
+			line="${line//"${PWD}"/.}"
 			log_warning "go test" "$line"
 			((ISSUES++)) # should additionally break commit attempt.
 		;;
 		esac
 	done < <( "$GO" test $NOCACHE "${TESTPKGS[@]}" 2>&1 )
 
-	return $ISSUES
+	# return $ISSUES would pass it through a uint8,
+	# so at exactly $ISSUES=256, we would accidentally return 0 instead.
+	[[ $ISSUES -ne 0 ]] && return 1
+	return 0
 }
 
 BLOCK_COMMIT="false"
 
 for gomod in "${GOMODS[@]}"; do
 	# run precommit_module in a subshell, since it can change directories.
-	if !( precommit_module $gomod ); then
+	if ! ( precommit_module "$gomod" ); then
 		BLOCK_COMMIT="true"
 	fi
 done
 
 branch="$(git rev-parse --abbrev-ref HEAD)"
-case $branch in
+case "$branch" in
 master|main)
 	log_error "branch name" "Do not commit to ${branch}."
 	BLOCK_COMMIT="true"
 ;;
 esac
 
-find * -type f -name "*.*" -exec check-noeol \{\} \+ || BLOCK_COMMIT="true"
+find ./* -type f -name "*.*" -exec check-noeol \{\} \+ || BLOCK_COMMIT="true"
 
 [[ "$BLOCK_COMMIT" == "true" ]] && exit 1
 exit 0
