@@ -283,7 +283,7 @@ function precommit_module {
 		pkg="$( echo "$pkg" | sed -e "s;\b\(_$PWD\|$MOD_PATH\)/;;g" -e "s;\b\(_$PWD\|$MOD_PATH\);.;g" )"
 
 		if git check-ignore -q "$pkg"; then
-			# If the project would be ignored in git, then we want to process it.
+			# If the project would be ignored in git, then we don't want to process it.
 			printf_verbose "package is ignored in git: %s\n" "$pkg"
 			continue
 		fi
@@ -423,6 +423,7 @@ function precommit_module {
 BLOCK_COMMIT="false"
 
 for gomod in "${GOMODS[@]}"; do
+	# run precommit_module in a subshell, since it can change directories.
 	if !( precommit_module $gomod ); then
 		BLOCK_COMMIT="true"
 	fi
@@ -436,7 +437,7 @@ master|main)
 ;;
 esac
 
-# find * -type f -name "*.*" -exec check-noeol \{\} \+ || BLOCK_COMMIT="true"
+find * -type f -name "*.*" -exec check-noeol \{\} \+ || BLOCK_COMMIT="true"
 
 [[ "$BLOCK_COMMIT" == "true" ]] && exit 1
 exit 0
