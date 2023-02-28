@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -22,16 +23,22 @@ var golintCmd = GolintBin{
 	},
 }
 
+var godocRegexp = regexp.MustCompile(" or be unexported$")
+
 // Lint calls `golint` on the given pkg, and returns true if there are any non-empty lines printed.
 //
 // The first line printed is preceeded by an Error message of the package name.
 // Lines from `golint` will have `trimPrefix` removed from the start of each line.
-func (g *GolintBin) Lint(ctx context.Context, pkg, trimPrefix string) bool {
+func (g *GolintBin) Lint(ctx context.Context, pkg, trimPrefix string, ignoreGodoc bool) bool {
 	var issues int
 
 	output, _ := g.CombinedOutput(ctx, pkg)
 	for _, line := range strings.Split(output, "\n") {
 		if line == "" {
+			continue
+		}
+
+		if ignoreGodoc && godocRegexp.MatchString(line) {
 			continue
 		}
 
