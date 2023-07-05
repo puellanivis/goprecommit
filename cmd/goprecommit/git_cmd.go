@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 	"sync"
 )
@@ -10,8 +12,8 @@ import (
 type GitBin struct {
 	command
 
-	filesOnce sync.Once
-	files     []string
+	mu    sync.Mutex
+	files map[string][]string
 
 	branchOnce sync.Once
 	branch     string
@@ -46,11 +48,25 @@ func (git *GitBin) Branch(ctx context.Context) string {
 
 // Files returns all of the files checked in.
 func (git *GitBin) Files(ctx context.Context) []string {
-	git.filesOnce.Do(func() {
-		git.files = strings.Split(git.MustOutput(ctx, "ls-files"), "\n")
-	})
+	git.mu.Lock()
+	defer git.mu.Unlock()
 
-	return git.files
+	dir, err := os.Getwd()
+	if err != nil {
+		panic(fmt.Errorf("could not get current working directory: %w", err))
+	}
+
+	files, ok := git.files[dir]
+	if !ok {
+		if git.files == nil {
+			git.files = make(map[string][]string)
+		}
+
+		files = strings.Split(git.MustOutput(ctx, "ls-files"), "\n")
+		git.files[dir] = files
+	}
+
+	return files
 }
 
 // CheckIgnore returns true if the given filename is ignored by git.

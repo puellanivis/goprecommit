@@ -88,7 +88,7 @@ func precommitCheckModule(ctx context.Context, goMod string) bool {
 
 	var modBase string
 	if goModules && testCanRead("go.mod") {
-		modBase = getModuleName(filepath.Base(goMod))
+		modBase = getModuleName("go.mod")
 		Verbose("found MOD_BASE", modBase)
 	}
 
@@ -166,8 +166,10 @@ func precommitCheckModule(ctx context.Context, goMod string) bool {
 		pkg = strings.ReplaceAll(pkg, modPath+pathSep, "")
 		pkg = strings.ReplaceAll(pkg, modPath, ".")
 
-		pkg = strings.ReplaceAll(pkg, modBase+pathSep, "")
-		pkg = strings.ReplaceAll(pkg, modBase, ".")
+		if modBase != "" {
+			pkg = strings.ReplaceAll(pkg, modBase+pathSep, "")
+			pkg = strings.ReplaceAll(pkg, modBase, ".")
+		}
 
 		if gitCmd.CheckIgnore(ctx, pkg) {
 			Verbose("package is ignored in git", pkg)
@@ -312,6 +314,16 @@ func endsWithEOL(filename string) bool {
 		return false
 	}
 	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		Error("check eol", err)
+		return false
+	}
+	if fi.Size() == 0 {
+		// a completely empty file is zero lines of text, and thus valid.
+		return true
+	}
 
 	if _, err := f.Seek(-1, os.SEEK_END); err != nil {
 		Error("check eol", err)
