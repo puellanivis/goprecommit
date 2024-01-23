@@ -15,11 +15,8 @@ type GitBin struct {
 	mu    sync.Mutex
 	files map[string][]string
 
-	branchOnce sync.Once
-	branch     string
-
-	headOnce sync.Once
-	head     string
+	branch once[string]
+	head   once[string]
 }
 
 var gitCmd = GitBin{
@@ -42,21 +39,17 @@ func (git *GitBin) InRepo(ctx context.Context) bool {
 
 // Branch returns the name of the current branch.
 func (git *GitBin) Branch(ctx context.Context) string {
-	git.branchOnce.Do(func() {
-		git.branch = git.MustOutput(ctx, "rev-parse", "--abbrev-ref", "HEAD")
+	return git.branch.Get(func() string {
+		return git.MustOutput(ctx, "rev-parse", "--abbrev-ref", "HEAD")
 	})
-
-	return git.branch
 }
 
 // HeadBranch returns the name of the head branch.
 func (git *GitBin) HeadBranch(ctx context.Context) string {
-	git.headOnce.Do(func() {
+	return git.head.Get(func() string {
 		head := git.MustOutput(ctx, "rev-parse", "--abbrev-ref", "refs/remotes/origin/HEAD")
-		git.head = strings.TrimPrefix(head, "origin/")
+		return strings.TrimPrefix(head, "origin/")
 	})
-
-	return git.head
 }
 
 // Files returns all of the files checked in.

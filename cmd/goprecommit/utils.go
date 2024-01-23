@@ -12,16 +12,15 @@ import (
 type command struct {
 	Bin string
 
-	once    sync.Once
-	binPath string
+	binPath once[string]
 }
 
 func (c *command) Command(ctx context.Context, args ...string) *exec.Cmd {
-	c.once.Do(func() {
-		c.binPath = mustFindBin(c.Bin)
+	binPath := c.binPath.Get(func() string {
+		return mustFindBin(c.Bin)
 	})
 
-	return exec.CommandContext(ctx, c.binPath, args...)
+	return exec.CommandContext(ctx, binPath, args...)
 }
 
 func (c *command) handleOutput(output []byte, err error) (string, bool) {
@@ -89,4 +88,17 @@ func mustFindBin(bin string) string {
 
 func findBin(bin string) (string, error) {
 	return exec.LookPath(bin)
+}
+
+type once[V any] struct {
+	vOnce sync.Once
+	v     V
+}
+
+func (o *once[V]) Get(f func() V) V {
+	o.vOnce.Do(func() {
+		o.v = f()
+	})
+
+	return o.v
 }

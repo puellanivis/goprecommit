@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 )
 
 // GolintBin defines a structured interface to a `golint` binary.
@@ -98,8 +97,7 @@ func (g *GofmtBin) List(ctx context.Context, filenames []string) []string {
 type GoBin struct {
 	command
 
-	verOnce sync.Once
-	ver     *SemVer
+	ver once[*SemVer]
 }
 
 var goCmd = GoBin{
@@ -110,7 +108,7 @@ var goCmd = GoBin{
 
 // Version returns the parsed SemVer returned by the binary.
 func (g *GoBin) Version(ctx context.Context) *SemVer {
-	g.verOnce.Do(func() {
+	return g.ver.Get(func() *SemVer {
 		output, ok := goCmd.Output(ctx, "version")
 		if !ok {
 			Error("could not get go version")
@@ -129,10 +127,8 @@ func (g *GoBin) Version(ctx context.Context) *SemVer {
 			Exit(1)
 		}
 
-		g.ver = ver
+		return ver
 	})
-
-	return g.ver
 }
 
 func ensureGopathBinInPath() {
