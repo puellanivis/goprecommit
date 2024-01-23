@@ -404,7 +404,7 @@ func main() {
 
 	branch := gitCmd.Branch(ctx)
 	switch branch {
-	case "master", "main", "production", "staging":
+	case gitCmd.HeadBranch(ctx), "production", "staging":
 		Error("branch name", "do not commit to ", branch)
 		blockCommit = true
 	}

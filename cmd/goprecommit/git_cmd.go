@@ -17,6 +17,9 @@ type GitBin struct {
 
 	branchOnce sync.Once
 	branch     string
+
+	headOnce sync.Once
+	head     string
 }
 
 var gitCmd = GitBin{
@@ -44,6 +47,16 @@ func (git *GitBin) Branch(ctx context.Context) string {
 	})
 
 	return git.branch
+}
+
+// HeadBranch returns the name of the head branch.
+func (git *GitBin) HeadBranch(ctx context.Context) string {
+	git.headOnce.Do(func() {
+		head := git.MustOutput(ctx, "rev-parse", "--abbrev-ref", "refs/remotes/origin/HEAD")
+		git.head = strings.TrimPrefix(head, "origin/")
+	})
+
+	return git.head
 }
 
 // Files returns all of the files checked in.
